@@ -1,0 +1,11 @@
+{
+  "name": "tokenboard",
+  "version": "1.0.0",
+  "description": "GitHub Copilot token usage analytics dashboard for Windows",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

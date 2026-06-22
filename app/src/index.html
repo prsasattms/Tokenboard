@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tokenboard</title>
+<script src="chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2230;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --info: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  nav.tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 12px 16px;
+    color: var(--muted);
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 24px; max-width: 1300px; margin: 0 auto; }
+  .grid { display: grid; gap: 16px; }
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+  .kpi .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 14px; font-weight: 600; }
+  .row2 { grid-template-columns: 2fr 1fr; }
+  .row1-1 { grid-template-columns: 1fr 1fr; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: var(--text); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: rgba(248,81,73,.15);
+    color: var(--bad);
+  }
+  .pill.zero { background: rgba(139,148,158,.15); color: var(--muted); }
+  .insight {
+    border-left: 3px solid var(--info);
+    background: var(--panel2);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .insight.warn { border-left-color: var(--warn); }
+  .insight.good { border-left-color: var(--good); }
+  .insight.info { border-left-color: var(--info); }
+  .insight .title { font-weight: 600; margin-bottom: 4px; }
+  .insight .finding { color: var(--text); margin-bottom: 4px; }
+  .insight .rec { color: var(--muted); font-size: 12px; }
+  .heatstrip { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+  .heatcell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: var(--panel2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--muted);
+  }
+  .muted { color: var(--muted); }
+  .chartbox { position: relative; height: 300px; }
+  .chartbox.sm { height: 240px; }
+  .hidden { display: none !important; }
+  #status { padding: 40px; text-align: center; color: var(--muted); }
+  .lessons-out {
+    background: #0a0e14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    max-height: 360px;
+    overflow: auto;
+    margin-top: 12px;
+  }
+  .footnote { color: var(--muted); font-size: 11px; margin-top: 24px; line-height: 1.5; }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>◧ Tokenboard</h1>
+  <span class="sub">GitHub Copilot usage analytics · Windows</span>
+  <span class="spacer"></span>
+  <span id="genat" class="sub"></span>
+  <button id="refresh">↻ Refresh</button>
+</header>
+
+<nav class="tabs">
+  <button class="tab" data-tab="overview">Overview</button>
+  <button class="tab" data-tab="tokens">Tokens / Usage</button>
+  <button class="tab" data-tab="repos">Repos &amp; Sessions</button>
+  <button class="tab" data-tab="tools">Tools &amp; Models</button>
+  <button class="tab" data-tab="rhythm">Rhythm</button>
+</nav>
+
+<div id="status">Loading Copilot history… <span class="spinner"></span></div>
+
+<main id="app" class="hidden">
+
+  <!-- OVERVIEW -->
+  <section class="tabsec" id="sec-overview">
+    <div class="grid kpis" id="kpiCards"></div>
+    <div style="height:16px"></div>
+    <div class="grid row2">
+      <div class="panel">
+        <h2>Insights</h2>
+        <div id="insightList"></div>
+      </div>
+      <div class="panel">
+        <h2>AI Lessons</h2>
+        <p class="muted" style="font-size:12px">Mine real failures from your history and ask your Copilot CLI to write project conventions.</p>
+        <button id="extractBtn" class="primary">✦ Extract AI lessons</button>
+        <button id="copyBtn" class="hidden">⧉ Copy for copilot-instructions.md</button>
+        <div id="lessonsOut" class="lessons-out hidden"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOKENS / USAGE -->
+  <section class="tabsec hidden" id="sec-tokens">
+    <div class="grid row2">
+      <div class="panel">
+        <h2>Daily activity</h2>
+        <div class="chartbox"><canvas id="dailyChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Token usage breakdown</h2>
+        <div class="chartbox sm"><canvas id="usageDoughnut"></canvas></div>
+      </div>
+    </div>
+    <div style="height:16px"></div>
+    <div class="grid kpis" id="effCards"></div>
+  </section>
+
+  <!-- REPOS & SESSIONS -->
+  <section class="tabsec hidden" id="sec-repos">
+    <div class="panel">
+      <h2>Repositories</h2>
+      <table id="repoTable"></table>
+    </div>
+    <div style="height:16px"></div>
+    <div class="panel">
+      <h2>Heaviest sessions</h2>
+      <table id="sessionTable"></table>
+    </div>
+  </section>
+
+  <!-- TOOLS & MODELS -->
+  <section class="tabsec hidden" id="sec-tools">
+    <div class="grid row1-1">
+      <div class="panel">
+        <h2>Tool usage (calls vs errors)</h2>
+        <div class="chartbox"><canvas id="toolChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Premium requests by model</h2>
+        <div class="chartbox sm"><canvas id="modelDoughnut"></canvas></div>
+        <table id="modelTable" style="margin-top:14px"></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- RHYTHM -->
+  <section class="tabsec hidden" id="sec-rhythm">
+    <div class="panel">
+      <h2>Hour of day (local, Mon-first)</h2>
+      <div class="heatstrip" id="hourStrip"></div>
+    </div>
+    <div style="height:16px"></div>
+    <div class="panel">
+      <h2>Day of week</h2>
+      <div class="chartbox sm"><canvas id="dowChart"></canvas></div>
+    </div>
+  </section>
+
+  <div class="footnote">
+    <strong>About the numbers.</strong> GitHub Copilot meters <em>premium requests</em> (per-model multipliers), not money.
+    The "Premium requests" figure is consumption against your monthly allowance — not a dollar amount.
+    Token counts are shown when Copilot exposes them; otherwise they read 0 and the view leads with request volume.
+    All data is read locally and read-only; nothing leaves your machine except the Copilot CLI call you trigger.
+  </div>
+</main>
+
+<script>
+const invoke = (cmd, args) =>
+  (window.__TAURI__ && window.__TAURI__.core)
+    ? window.__TAURI__.core.invoke(cmd, args)
+    : Promise.reject(new Error("Tauri bridge unavailable (open inside the app, not a browser)."));
+
+let DATA = null;
+const charts = {};
+
+const fmt = n => (n == null ? "0" : n.toLocaleString());
+const fmtSecs = s => {
+  s = Math.round(s || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+};
+const fmtPct = x => (x == null ? "0%" : (x * 100).toFixed(1) + "%");
+
+/* ---------- tabs ---------- */
+const showTab = name => {
+  document.querySelectorAll('.tabsec').forEach(s => s.classList.toggle('hidden', s.id !== 'sec-' + name));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  try { localStorage.setItem('tb_tab', name); } catch (e) {}
+  if (DATA) renderChartsFor(name);
+};
+document.querySelectorAll('.tab').forEach(t =>
+  t.addEventListener('click', () => { location.hash = t.dataset.tab; showTab(t.dataset.tab); })
+);
+
+/* ---------- KPI cards ---------- */
+function renderKpis() {
+  const t = DATA.totals;
+  const cards = [
+    { label: "Sessions", value: fmt(t.sessions), hint: `${fmt(t.repos)} repos` },
+    { label: "User turns", value: fmt(t.userTurns), hint: `${fmt(t.assistantTurns)} assistant turns` },
+    { label: "Premium requests", value: t.cost.toFixed(1), hint: "consumption, not $" },
+    { label: "Tool calls", value: fmt(t.toolCalls), hint: `${fmt(t.toolErrors)} errors` },
+    { label: "Total tokens", value: fmt(t.totalTokens), hint: t.totalTokens ? "billed" : "not exposed by Copilot" },
+    { label: "Output tokens", value: fmt(t.outputTokens), hint: "" },
+    { label: "Active time", value: fmtSecs(t.activeSeconds), hint: `${fmtSecs(t.idleSeconds)} idle` },
+    { label: "Active days", value: fmt(DATA.daily.length), hint: t.lastTs ? "latest " + new Date(t.lastTs).toLocaleDateString() : "" },
+  ];
+  document.getElementById('kpiCards').innerHTML = cards.map(c => `
+    <div class="kpi">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="hint">${c.hint}</div>
+    </div>`).join('');
+}
+
+function renderInsights() {
+  const list = document.getElementById('insightList');
+  if (!DATA.insights || !DATA.insights.length) {
+    list.innerHTML = '<p class="muted">No insights yet — use Copilot more and refresh.</p>';
+    return;
+  }
+  list.innerHTML = DATA.insights.map(i => `
+    <div class="insight ${i.severity}">
+      <div class="title">${esc(i.title)}</div>
+      <div class="finding">${esc(i.finding)}</div>
+      <div class="rec">→ ${esc(i.recommendation)}</div>
+    </div>`).join('');
+}
+
+function renderEfficiency() {
+  const e = DATA.efficiency;
+  const hasTokens = DATA.totals.totalTokens > 0;
+  const cards = [
+    hasTokens ? { label: "Cache hit rate", value: fmtPct(e.cacheHitRate) } : null,
+    { label: "Output / input ratio", value: e.outInRatio.toFixed(2) },
+    { label: "Avg tokens / turn", value: fmt(Math.round(e.avgTokensPerTurn)) },
+    { label: "Tool error rate", value: fmtPct(e.toolErrorRate) },
+    { label: "Requests / turn", value: e.costPerTurn.toFixed(2) },
+  ].filter(Boolean);
+  document.getElementById('effCards').innerHTML = cards.map(c => `
+    <div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
+}
+
+/* ---------- sortable tables ---------- */
+function makeTable(el, columns, rows, defaultSort) {
+  let sortKey = defaultSort.key, sortDir = defaultSort.dir;
+  function render() {
+    const sorted = [...rows].sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+      return sortDir * ((av || 0) - (bv || 0));
+    });
+    el.innerHTML =
+      '<thead><tr>' + columns.map(c =>
+        `<th class="${c.num ? 'num' : ''}" data-k="${c.key}">${c.label}${sortKey === c.key ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`
+      ).join('') + '</tr></thead><tbody>' +
+      sorted.map(r => '<tr>' + columns.map(c =>
+        `<td class="${c.num ? 'num' : ''}">${c.fmt ? c.fmt(r[c.key], r) : esc(String(r[c.key] ?? ''))}</td>`
+      ).join('') + '</tr>').join('') + '</tbody>';
+    el.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+      const k = th.dataset.k;
+      if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = -1; }
+      render();
+    }));
+  }
+  render();
+}
+
+function renderRepoTable() {
+  makeTable(document.getElementById('repoTable'),
+    [
+      { key: 'name', label: 'Repository' },
+      { key: 'sessions', label: 'Sessions', num: true },
+      { key: 'userTurns', label: 'User turns', num: true },
+      { key: 'toolCalls', label: 'Tools', num: true },
+      { key: 'toolErrors', label: 'Errors', num: true, fmt: v => v ? `<span class="pill">${v}</span>` : `<span class="pill zero">0</span>` },
+      { key: 'totalTokens', label: 'Tokens', num: true, fmt: fmt },
+      { key: 'cost', label: 'Premium req', num: true, fmt: v => v.toFixed(1) },
+      { key: 'activeSeconds', label: 'Active', num: true, fmt: fmtSecs },
+    ], DATA.repos, { key: 'totalTokens', dir: -1 });
+}
+
+function renderSessionTable() {
+  makeTable(document.getElementById('sessionTable'),
+    [
+      { key: 'title', label: 'Session', fmt: (v, r) => esc((v || r.id || '').slice(0, 50)) },
+      { key: 'repo', label: 'Repo' },
+      { key: 'userTurns', label: 'Turns', num: true },
+      { key: 'toolCalls', label: 'Tools', num: true },
+      { key: 'toolErrors', label: 'Err', num: true, fmt: v => v ? `<span class="pill">${v}</span>` : `<span class="pill zero">0</span>` },
+      { key: 'totalTokens', label: 'Tokens', num: true, fmt: fmt },
+      { key: 'cost', label: 'Premium req', num: true, fmt: v => v.toFixed(1) },
+      { key: 'activeSeconds', label: 'Active', num: true, fmt: fmtSecs },
+    ], DATA.sessions, { key: 'cost', dir: -1 });
+}
+
+function renderModelTable() {
+  makeTable(document.getElementById('modelTable'),
+    [
+      { key: 'model', label: 'Model' },
+      { key: 'messages', label: 'Msgs', num: true },
+      { key: 'outputTokens', label: 'Output tok', num: true, fmt: fmt },
+      { key: 'cost', label: 'Premium req', num: true, fmt: v => v.toFixed(1) },
+    ], DATA.models, { key: 'cost', dir: -1 });
+}
+
+/* ---------- charts ---------- */
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+const GRID = 'rgba(139,148,158,.15)', TICK = '#8b949e';
+const baseOpts = scales => ({
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: TICK } } },
+  scales: scales
+});
+
+function renderDaily() {
+  destroyChart('dailyChart');
+  const d = DATA.daily;
+  charts.dailyChart = new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+      labels: d.map(x => x.date),
+      datasets: [
+        { type: 'line', label: 'Premium requests', data: d.map(x => x.cost), borderColor: '#2f81f7', backgroundColor: '#2f81f7', yAxisID: 'y1', tension: .3 },
+        { type: 'line', label: 'Input tokens', data: d.map(x => x.inputTokens), borderColor: '#56d4dd', backgroundColor: '#56d4dd', yAxisID: 'y', tension: .3 },
+        { type: 'bar', label: 'Output tokens', data: d.map(x => x.outputTokens), backgroundColor: 'rgba(63,185,80,.6)', yAxisID: 'y' },
+        { type: 'bar', label: 'User turns', data: d.map(x => x.userTurns), backgroundColor: 'rgba(210,153,34,.6)', yAxisID: 'y' },
+      ]
+    },
+    options: {
+      ...baseOpts({
+        x: { ticks: { color: TICK }, grid: { color: GRID } },
+        y: { position: 'left', ticks: { color: TICK }, grid: { color: GRID } },
+        y1: { position: 'right', ticks: { color: TICK }, grid: { drawOnChartArea: false } },
+      })
+    }
+  });
+}
+
+function renderUsageDoughnut() {
+  destroyChart('usageDoughnut');
+  const t = DATA.totals;
+  const data = [t.inputTokens, t.outputTokens, t.cacheReadTokens, t.cacheCreateTokens];
+  const empty = data.every(x => !x);
+  charts.usageDoughnut = new Chart(document.getElementById('usageDoughnut'), {
+    type: 'doughnut',
+    data: {
+      labels: empty ? ['No token data exposed'] : ['Input', 'Output', 'Cache read', 'Cache create'],
+      datasets: [{ data: empty ? [1] : data, backgroundColor: empty ? ['#30363d'] : ['#2f81f7', '#3fb950', '#a371f7', '#d29922'] }]
+    },
+    options: baseOpts({})
+  });
+}
+
+function renderToolChart() {
+  destroyChart('toolChart');
+  const t = DATA.tools.slice(0, 12);
+  charts.toolChart = new Chart(document.getElementById('toolChart'), {
+    type: 'bar',
+    data: {
+      labels: t.map(x => x.name),
+      datasets: [
+        { label: 'Calls', data: t.map(x => x.count - x.errors), backgroundColor: 'rgba(47,129,247,.7)' },
+        { label: 'Errors', data: t.map(x => x.errors), backgroundColor: 'rgba(248,81,73,.8)' },
+      ]
+    },
+    options: { indexAxis: 'y', ...baseOpts({
+      x: { stacked: true, ticks: { color: TICK }, grid: { color: GRID } },
+      y: { stacked: true, ticks: { color: TICK }, grid: { color: GRID } },
+    }) }
+  });
+}
+
+function renderModelDoughnut() {
+  destroyChart('modelDoughnut');
+  const m = DATA.models;
+  const empty = !m.length || m.every(x => !x.cost);
+  charts.modelDoughnut = new Chart(document.getElementById('modelDoughnut'), {
+    type: 'doughnut',
+    data: {
+      labels: empty ? ['No premium usage'] : m.map(x => x.model),
+      datasets: [{ data: empty ? [1] : m.map(x => x.cost), backgroundColor: empty ? ['#30363d'] : ['#2f81f7', '#3fb950', '#a371f7', '#d29922', '#f85149', '#58a6ff'] }]
+    },
+    options: baseOpts({})
+  });
+}
+
+function renderDow() {
+  destroyChart('dowChart');
+  charts.dowChart = new Chart(document.getElementById('dowChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{ label: 'User turns', data: DATA.dowHist, backgroundColor: 'rgba(47,129,247,.7)' }]
+    },
+    options: baseOpts({
+      x: { ticks: { color: TICK }, grid: { color: GRID } },
+      y: { ticks: { color: TICK }, grid: { color: GRID } },
+    })
+  });
+}
+
+function renderHourStrip() {
+  const h = DATA.hourHist;
+  const max = Math.max(1, ...h);
+  document.getElementById('hourStrip').innerHTML = h.map((v, i) => {
+    const a = v / max;
+    const bg = a === 0 ? 'var(--panel2)' : `rgba(47,129,247,${0.15 + a * 0.85})`;
+    return `<div class="heatcell" style="background:${bg}" title="${i}:00 — ${v} turns">${i}</div>`;
+  }).join('');
+}
+
+function renderChartsFor(tab) {
+  if (tab === 'tokens') { renderDaily(); renderUsageDoughnut(); }
+  if (tab === 'tools') { renderToolChart(); renderModelDoughnut(); }
+  if (tab === 'rhythm') { renderHourStrip(); renderDow(); }
+}
+
+/* ---------- AI lessons ---------- */
+let lessonsText = '';
+document.getElementById('extractBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('extractBtn');
+  const out = document.getElementById('lessonsOut');
+  btn.disabled = true; btn.innerHTML = 'Mining failures… <span class="spinner"></span>';
+  out.classList.remove('hidden'); out.textContent = 'Running Copilot CLI in programmatic mode…';
+  try {
+    const res = await invoke('ai_insights', { model: null });
+    lessonsText = res;
+    try {
+      const arr = JSON.parse(res);
+      out.textContent = arr.map(x =>
+        `▸ ${x.title} [${x.scope}]\n  ${x.convention}\n  evidence: ${x.evidence}\n`).join('\n');
+    } catch (e) {
+      out.textContent = res;
+    }
+    document.getElementById('copyBtn').classList.remove('hidden');
+  } catch (e) {
+    out.textContent = '⚠ ' + (e.message || e);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '✦ Extract AI lessons';
+  }
+});
+document.getElementById('copyBtn').addEventListener('click', () => {
+  let md = lessonsText;
+  try {
+    const arr = JSON.parse(lessonsText);
+    md = arr.map(x => `## ${x.title}\n\n${x.convention}\n\n_Evidence: ${x.evidence} (${x.scope})_\n`).join('\n');
+  } catch (e) {}
+  navigator.clipboard.writeText(md).then(() => {
+    const b = document.getElementById('copyBtn');
+    b.textContent = '✓ Copied'; setTimeout(() => b.textContent = '⧉ Copy for copilot-instructions.md', 1500);
+  });
+});
+
+/* ---------- util ---------- */
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+/* ---------- load ---------- */
+async function load() {
+  document.getElementById('status').classList.remove('hidden');
+  document.getElementById('app').classList.add('hidden');
+  try {
+    const json = await invoke('analyze');
+    DATA = JSON.parse(json);
+    document.getElementById('genat').textContent = 'Generated ' + DATA.generatedAt;
+    renderKpis();
+    renderInsights();
+    renderEfficiency();
+    renderRepoTable();
+    renderSessionTable();
+    renderModelTable();
+    document.getElementById('status').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    const tab = (location.hash.slice(1)) || (localStorage.getItem('tb_tab')) || 'overview';
+    showTab(tab);
+  } catch (e) {
+    document.getElementById('status').innerHTML = '⚠ ' + esc(e.message || String(e));
+  }
+}
+document.getElementById('refresh').addEventListener('click', load);
+load();
+</script>
+</body>
+</html>
