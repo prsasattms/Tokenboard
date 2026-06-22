@@ -23,7 +23,8 @@ Grab the latest build from the [**Releases**](https://github.com/prsasattms/Toke
 
 These installers are **not code-signed**, so Windows SmartScreen and Defender flag them as
 coming from an unknown publisher. This is a trust/reputation warning — **not** a virus
-detection. To proceed:
+detection. (Once the repo is configured for signing — see **CI/CD → Code signing** —
+signed release builds install without this prompt.) To proceed:
 
 - On the SmartScreen dialog: click **More info → Run anyway**.
 - Or unblock the file first in PowerShell:
@@ -129,5 +130,44 @@ npx tauri build
 
 ## CI/CD
 
-`.github/workflows/release.yml` runs a single `windows-latest` job. Tag `v1.0.0` to
-trigger; `tauri-action` builds both installers into one draft release for review.
+`.github/workflows/release.yml` runs a single `windows-latest` job. Push a `v*` tag to
+trigger; `tauri-action` builds both installers into one **draft** release for review.
+
+### Code signing (optional — Azure Trusted Signing)
+
+Unsigned installers trip the SmartScreen "unknown publisher" warning. The workflow
+**automatically signs** the app and both installers when Azure Trusted Signing is
+configured; with no config it builds unsigned (unchanged). To enable it:
+
+1. **Azure (one-time):**
+   - Create a **Trusted Signing account** and a **Certificate Profile** (Public Trust)
+     in a supported region, and complete identity validation.
+   - Create an **App registration** (service principal) and grant it the
+     **Trusted Signing Certificate Profile Signer** role on the account.
+   - Note the endpoint (e.g. `https://eus.codesigning.azure.net/`), the account name,
+     and the certificate-profile name.
+
+2. **GitHub repo settings** (Settings → Secrets and variables → Actions):
+
+   | Kind | Name | Value |
+   | --- | --- | --- |
+   | Variable | `AZURE_TS_ENDPOINT` | signing endpoint URL |
+   | Variable | `AZURE_TS_ACCOUNT` | Trusted Signing account name |
+   | Variable | `AZURE_TS_CERT_PROFILE` | certificate profile name |
+   | Secret | `AZURE_TENANT_ID` | service-principal tenant id |
+   | Secret | `AZURE_CLIENT_ID` | service-principal client id |
+   | Secret | `AZURE_CLIENT_SECRET` | service-principal client secret |
+
+   Or from the CLI:
+
+   ```powershell
+   gh variable set AZURE_TS_ENDPOINT     --repo prsasattms/Tokenboard --body "https://<region>.codesigning.azure.net/"
+   gh variable set AZURE_TS_ACCOUNT      --repo prsasattms/Tokenboard --body "<account-name>"
+   gh variable set AZURE_TS_CERT_PROFILE --repo prsasattms/Tokenboard --body "<profile-name>"
+   gh secret   set AZURE_TENANT_ID       --repo prsasattms/Tokenboard
+   gh secret   set AZURE_CLIENT_ID       --repo prsasattms/Tokenboard
+   gh secret   set AZURE_CLIENT_SECRET   --repo prsasattms/Tokenboard
+   ```
+
+Once `AZURE_TS_ENDPOINT` is set, the next tagged build signs the app + MSI + NSIS
+installer automatically and no longer trips SmartScreen.

@@ -23,10 +23,50 @@ jobs:
         run: npm install
         working-directory: app
 
+      # --- Optional code signing via Azure Trusted / Artifact Signing ---------
+      # Auto-enabled when the AZURE_TS_ENDPOINT repository *variable* is set;
+      # otherwise the build runs unsigned (unchanged behaviour).
+      # Repo variables: AZURE_TS_ENDPOINT, AZURE_TS_ACCOUNT, AZURE_TS_CERT_PROFILE
+      # Repo secrets:   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+      - name: Detect signing config
+        id: signing
+        shell: bash
+        run: |
+          if [ -n "${{ vars.AZURE_TS_ENDPOINT }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Code signing ENABLED (Azure Trusted Signing)"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Code signing DISABLED - set AZURE_TS_* variables/secrets to enable"
+          fi
+
+      - name: Setup .NET (signing dependency)
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install Azure signing CLI
+        if: steps.signing.outputs.enabled == 'true'
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
+
+      - name: Inject signCommand into Tauri config
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          TS_ENDPOINT: ${{ vars.AZURE_TS_ENDPOINT }}
+          TS_ACCOUNT: ${{ vars.AZURE_TS_ACCOUNT }}
+          TS_PROFILE: ${{ vars.AZURE_TS_CERT_PROFILE }}
+        run: |
+          node -e 'const fs=require("fs");const p="app/src-tauri/tauri.conf.json";const c=JSON.parse(fs.readFileSync(p,"utf8"));c.bundle=c.bundle||{};c.bundle.windows=c.bundle.windows||{};c.bundle.windows.signCommand="artifact-signing-cli -e "+process.env.TS_ENDPOINT+" -a "+process.env.TS_ACCOUNT+" -c "+process.env.TS_PROFILE+" %1";fs.writeFileSync(p,JSON.stringify(c,null,2));console.log("signCommand:",c.bundle.windows.signCommand);'
+
       - name: Build Tauri app (MSI + NSIS) and create release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         with:
           projectPath: app
           tagName: ${{ github.ref_name }}
