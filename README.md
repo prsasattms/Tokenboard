@@ -171,3 +171,12 @@ configured; with no config it builds unsigned (unchanged). To enable it:
 
 Once `AZURE_TS_ENDPOINT` is set, the next tagged build signs the app + MSI + NSIS
 installer automatically and no longer trips SmartScreen.
+
+### Internal signing (ESRP, for Microsoft-internal distribution)
+
+For a Microsoft-internal build, signing goes through **ESRP** (not self-served Trusted
+Signing). ESRP runs behind internal infrastructure, so it can't be called from the public
+GitHub Actions workflow — use the Azure DevOps pipeline at **`azure-pipelines.yml`**
+instead. It builds the MSI + NSIS installers and signs them with the `EsrpCodeSigning`
+task. Connect this repo in an Azure DevOps project, complete ESRP onboarding, fill in the
+`<PLACEHOLDER>` variables at the top of `azure-pipelines.yml`, then run it (tag-triggered).

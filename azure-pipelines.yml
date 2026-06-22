@@ -1,0 +1,132 @@
+# Azure DevOps pipeline: build Tokenboard (Tauri) Windows installers and
+# code-sign them with ESRP — the sanctioned internal Microsoft signing service.
+#
+# WHY THIS EXISTS
+#   Tokenboard is a Microsoft-internal tool, so its installers must be signed via
+#   ESRP (not self-served Azure Trusted Signing). ESRP runs behind internal
+#   infrastructure, so signing has to happen in Azure DevOps (or a 1ES pipeline),
+#   not in the public GitHub Actions workflow.
+#
+# ONE-TIME PREREQUISITES (owned by you + your ESRP/1ES admins)
+#   1. An Azure DevOps project that builds this repo (connect the GitHub repo via a
+#      GitHub service connection, or mirror the repo into Azure Repos).
+#   2. ESRP onboarding for your team, which gives you:
+#        - an ESRP code-signing *service connection*, and
+#        - the AAD app / Key Vault / cert names used for ESRP auth.
+#   3. Fill in every <PLACEHOLDER> in the `variables` block below from your ESRP
+#      onboarding ticket. Confirm the keyCode / timestamp values with that ticket —
+#      the ones here are the standard Microsoft Authenticode defaults.
+#
+# COMPLIANCE NOTE
+#   Most Microsoft teams are required to build/sign with the 1ES Pipeline Templates
+#   (which have signing built in). If that applies to you, fold the build steps
+#   below into the 1ES template instead of using the standalone EsrpCodeSigning task.
+
+trigger:
+  tags:
+    include:
+      - v*
+
+pr: none
+
+pool:
+  vmImage: windows-latest    # or your team's 1ES-hosted Windows pool
+
+variables:
+  # ---- Fill these from your ESRP onboarding ----------------------------------
+  EsrpServiceConnection: '<ESRP-SERVICE-CONNECTION-NAME>'
+  EsrpAppRegistrationClientId: '<ESRP-APP-CLIENT-ID>'
+  EsrpAppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'  # Microsoft tenant
+  EsrpAuthAkvName: '<ESRP-KEYVAULT-NAME>'
+  EsrpAuthSignCertName: '<ESRP-SIGNING-CERT-NAME>'
+  EsrpAuthCertName: '<ESRP-AUTH-CERT-NAME>'
+  # Microsoft Authenticode key + internal RFC3161 timestamp server (standard values)
+  EsrpKeyCode: 'CP-230012'
+  EsrpTimestampUrl: 'http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer'
+  # ----------------------------------------------------------------------------
+
+steps:
+  - checkout: self
+
+  - task: NodeTool@0
+    displayName: 'Install Node.js'
+    inputs:
+      versionSpec: '22.x'
+
+  - script: rustup default stable-x86_64-pc-windows-msvc
+    displayName: 'Ensure Rust stable (MSVC)'
+
+  - script: npm install
+    displayName: 'Install frontend deps'
+    workingDirectory: app
+
+  - script: npx tauri build
+    displayName: 'Build MSI + NSIS installers'
+    workingDirectory: app
+
+  - task: PowerShell@2
+    displayName: 'Stage installers for signing'
+    inputs:
+      targetType: inline
+      script: |
+        $bundle = "app/src-tauri/target/release/bundle"
+        $stage  = "$(Build.ArtifactStagingDirectory)/installers"
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Get-ChildItem -Recurse -Path $bundle -Include *.msi, *.exe |
+          ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
+        Get-ChildItem $stage | Format-Table Name, Length
+
+  - task: EsrpCodeSigning@5
+    displayName: 'ESRP sign installers (Authenticode)'
+    inputs:
+      ConnectedServiceName: '$(EsrpServiceConnection)'
+      AppRegistrationClientId: '$(EsrpAppRegistrationClientId)'
+      AppRegistrationTenantId: '$(EsrpAppRegistrationTenantId)'
+      AuthAKVName: '$(EsrpAuthAkvName)'
+      AuthSignCertName: '$(EsrpAuthSignCertName)'
+      AuthCertName: '$(EsrpAuthCertName)'
+      FolderPath: '$(Build.ArtifactStagingDirectory)/installers'
+      Pattern: '*.exe,*.msi'
+      signConfigType: inlineSignParams
+      inlineOperation: |
+        [
+          {
+            "keyCode": "$(EsrpKeyCode)",
+            "operationSetCode": "SigntoolSign",
+            "parameters": [
+              { "parameterName": "OpusName",   "parameterValue": "Tokenboard" },
+              { "parameterName": "OpusInfo",   "parameterValue": "https://github.com/prsasattms/Tokenboard" },
+              { "parameterName": "FileDigest", "parameterValue": "/fd SHA256" },
+              { "parameterName": "PageHash",   "parameterValue": "/NPH" },
+              { "parameterName": "TimeStamp",  "parameterValue": "/tr $(EsrpTimestampUrl) /td SHA256" }
+            ],
+            "toolName": "sign",
+            "toolVersion": "1.0"
+          },
+          {
+            "keyCode": "$(EsrpKeyCode)",
+            "operationSetCode": "SigntoolVerify",
+            "parameters": [],
+            "toolName": "sign",
+            "toolVersion": "1.0"
+          }
+        ]
+      SessionTimeout: '60'
+      MaxConcurrency: '50'
+      MaxRetryAttempts: '5'
+
+  # Optional: produce checksums for the SIGNED installers.
+  - task: PowerShell@2
+    displayName: 'Generate SHA256SUMS for signed installers'
+    inputs:
+      targetType: inline
+      script: |
+        $stage = "$(Build.ArtifactStagingDirectory)/installers"
+        Get-ChildItem -Path $stage -Include *.exe, *.msi -Recurse |
+          ForEach-Object { "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower(), $_.Name } |
+          Set-Content -Path "$stage/SHA256SUMS.txt" -Encoding ascii
+        Get-Content "$stage/SHA256SUMS.txt"
+
+  - publish: '$(Build.ArtifactStagingDirectory)/installers'
+    artifact: signed-installers
+    displayName: 'Publish signed installers'
