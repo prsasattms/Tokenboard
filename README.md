@@ -10,6 +10,37 @@ requests go, which repos cost the most premium requests, and what habits to fix.
 - **Privacy:** everything is read locally and read-only; the only network call is the
   Copilot CLI subprocess you trigger via "Extract AI lessons".
 
+## Download & install (Windows x64)
+
+Grab the latest build from the [**Releases**](https://github.com/prsasattms/Tokenboard/releases/latest) page:
+
+| File | Type |
+| --- | --- |
+| `Tokenboard_1.0.0_x64_en-US.msi` | MSI installer |
+| `Tokenboard_1.0.0_x64-setup.exe` | NSIS setup |
+
+### "Windows protected your PC" / unknown publisher
+
+These installers are **not code-signed**, so Windows SmartScreen and Defender flag them as
+coming from an unknown publisher. This is a trust/reputation warning — **not** a virus
+detection. To proceed:
+
+- On the SmartScreen dialog: click **More info → Run anyway**.
+- Or unblock the file first in PowerShell:
+
+  ```powershell
+  Unblock-File .\Tokenboard_1.0.0_x64-setup.exe
+  ```
+
+### Verify your download (recommended)
+
+Every release ships a `SHA256SUMS.txt`. Check that your file's hash matches:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\Tokenboard_1.0.0_x64-setup.exe
+# compare the printed hash against the matching line in SHA256SUMS.txt
+```
+
 ## What it shows (5 tabs)
 
 | Tab | Content |
